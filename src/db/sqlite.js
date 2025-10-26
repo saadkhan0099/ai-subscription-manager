@@ -1,113 +1,61 @@
-// backend/src/routes/subscriptions.js
-import express from "express";
+import sqlite3 from "sqlite3";
+import { open } from "sqlite";
+import path from "path";
 
-export default function subscriptionRoutes(db) {
-  const router = express.Router();
+const dbPath = path.resolve("./data.db");
 
-  // ✅ Get all subscriptions
-  router.get("/", (req, res) => {
-    try {
-      const rows = db
-        .prepare("SELECT * FROM subscriptions ORDER BY created_at DESC")
-        .all();
-      res.json({ subscriptions: rows });
-    } catch (err) {
-      console.error("GET error:", err);
-      res.status(500).json({ error: "Failed to fetch subscriptions" });
-    }
-  });
+console.log("⏳ Opening SQLite database...");
 
-  // ✅ Create a new subscription
-  router.post("/", (req, res) => {
-    const { vendor, amount } = req.body;
+const dbPromise = open({
+  filename: dbPath,
+  driver: sqlite3.Database,
+});
 
-    if (!vendor || !amount) {
-      return res.status(400).json({ error: "vendor and amount are required" });
-    }
+async function initDB() {
+  try {
+    const db = await dbPromise;
+    console.log("⏳ Creating tables if they don't exist...");
 
-    try {
-      const stmt = db.prepare(
-        "INSERT INTO subscriptions (user_id, name, amount, status) VALUES (?, ?, ?, ?)"
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        wallet_address TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
-      const info = stmt.run(null, vendor, amount, "active");
-      const created = db
-        .prepare("SELECT * FROM subscriptions WHERE id = ?")
-        .get(info.lastInsertRowid);
-      res.status(201).json({ subscription: created });
-    } catch (err) {
-      console.error("POST error:", err);
-      res.status(500).json({ error: "Failed to create subscription" });
-    }
-  });
 
-  // ✅ Update a subscription (PUT)
-  router.put("/:id", (req, res) => {
-    const { id } = req.params;
-    const { name, amount, status } = req.body;
-
-    try {
-      const existing = db
-        .prepare("SELECT * FROM subscriptions WHERE id = ?")
-        .get(id);
-      if (!existing) {
-        return res.status(404).json({ error: "Subscription not found" });
-      }
-
-      const stmt = db.prepare(`
-        UPDATE subscriptions
-        SET name = COALESCE(?, name),
-            amount = COALESCE(?, amount),
-            status = COALESCE(?, status)
-        WHERE id = ?
-      `);
-      stmt.run(name, amount, status, id);
-
-      const updated = db
-        .prepare("SELECT * FROM subscriptions WHERE id = ?")
-        .get(id);
-      res.json({ subscription: updated });
-    } catch (err) {
-      console.error("PUT error:", err);
-      res.status(500).json({ error: "Failed to update subscription" });
-    }
-  });
-
-  // ✅ Delete a subscription (DELETE)
-  router.delete("/:id", (req, res) => {
-    const { id } = req.params;
-
-    try {
-      const existing = db
-        .prepare("SELECT * FROM subscriptions WHERE id = ?")
-        .get(id);
-      if (!existing) {
-        return res.status(404).json({ error: "Subscription not found" });
-      }
-
-      db.prepare("DELETE FROM subscriptions WHERE id = ?").run(id);
-      res.json({ message: "Subscription deleted successfully" });
-    } catch (err) {
-      console.error("DELETE error:", err);
-      res.status(500).json({ error: "Failed to delete subscription" });
-    }
-  });
-
-  // ✅ Quick seed (for testing)
-  router.post("/seed", (req, res) => {
-    try {
-      const stmt = db.prepare(
-        "INSERT INTO subscriptions (user_id, name, amount, status) VALUES (?, ?, ?, ?)"
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        subscription_name TEXT NOT NULL,
+        amount REAL NOT NULL,
+        status TEXT DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id)
       );
-      const info = stmt.run(null, "Netflix", 15.99, "active");
-      const row = db
-        .prepare("SELECT * FROM subscriptions WHERE id = ?")
-        .get(info.lastInsertRowid);
-      res.json({ inserted: row });
-    } catch (err) {
-      console.error("Seed error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
 
-  return router;
+      CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        subscription_id INTEGER NOT NULL,
+        tx_hash TEXT,
+        amount REAL NOT NULL,
+        status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(subscription_id) REFERENCES subscriptions(id)
+      );
+    `);
+
+    console.log("✅ SQLite database initialized");
+  } catch (err) {
+    console.error("❌ SQLite init error:", err);
+    process.exit(1); // stop app if DB fails
+  }
 }
+
+// initialize on import
+initDB();
+
+export default dbPromise;
