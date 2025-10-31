@@ -8,21 +8,18 @@ const router = express.Router();
 // Signup route
 router.post("/signup", async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
+  if (!email || !password)
     return res.status(400).json({ error: "Email and password are required" });
-  }
 
   try {
     const db = await dbPromise;
 
-    // Check if user already exists
     const existingUser = await db.get(
       "SELECT * FROM users WHERE email = ?",
       email
     );
-    if (existingUser) {
+    if (existingUser)
       return res.status(400).json({ error: "Email already registered" });
-    }
 
     const hashed = await bcrypt.hash(password, 10);
     const info = await db.run(
@@ -31,7 +28,18 @@ router.post("/signup", async (req, res) => {
       hashed
     );
 
-    res.json({ message: "User created", user_id: info.lastID });
+    const userId = info.lastID;
+
+    if (!process.env.JWT_SECRET)
+      return res.status(201).json({ message: "User created", user_id: userId });
+
+    const token = jwt.sign({ id: userId, email }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+
+    res
+      .status(201)
+      .json({ message: "User created", user: { id: userId, email }, token });
   } catch (err) {
     console.error("Signup error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -41,34 +49,36 @@ router.post("/signup", async (req, res) => {
 // Login route
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
+  if (!email || !password)
     return res.status(400).json({ error: "Email and password are required" });
-  }
 
   try {
     const db = await dbPromise;
     const user = await db.get("SELECT * FROM users WHERE email = ?", email);
 
-    if (!user) {
+    if (!user)
       return res.status(400).json({ error: "Invalid email or password" });
-    }
 
     const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) {
+    if (!match)
       return res.status(400).json({ error: "Invalid email or password" });
-    }
 
-    if (!process.env.JWT_SECRET) {
-      throw new Error("JWT_SECRET not defined");
-    }
+    if (!process.env.JWT_SECRET)
+      return res.status(500).json({ error: "JWT_SECRET not set" });
 
     const token = jwt.sign(
       { id: user.id, email: user.email },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      {
+        expiresIn: "1h",
+      }
     );
 
-    res.json({ message: "Login successful", token });
+    res.json({
+      message: "Login successful",
+      user: { id: user.id, email: user.email },
+      token,
+    });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ error: "Internal server error" });

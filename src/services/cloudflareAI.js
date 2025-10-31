@@ -1,23 +1,15 @@
 import axios from "axios";
 
-/**
- * Analyzes subscription text using Cloudflare Workers AI.
- */
 export async function analyzeSubscription(subscriptionText) {
-  if (typeof subscriptionText !== "string" || !subscriptionText.trim()) {
+  if (typeof subscriptionText !== "string" || !subscriptionText.trim())
     throw new Error("Invalid subscription text");
-  }
 
   try {
-    // 🧠 Real API call placeholder (replace with your account ID and key)
-    // const response = await axios.post(
-    //   `https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/run/@cf/meta/llama-2-7b-chat-int8`,
-    //   { prompt: `Analyze the following subscriptions:\n${subscriptionText}` },
-    //   { headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_KEY}` } }
-    // );
+    // Replace below with real Cloudflare AI API call if you have credentials
+    // const response = await axios.post(`CLOUDFLARE_API_ENDPOINT`, { prompt: subscriptionText }, { headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_KEY}` } });
     // return response.data;
 
-    // Mock response for testing/demo
+    // Mock response for demo
     return {
       subscriptions: [
         { name: "Netflix", amount: 15.99, status: "active" },

@@ -3,7 +3,6 @@ import { open } from "sqlite";
 import path from "path";
 
 const dbPath = path.resolve("./data.db");
-
 console.log("⏳ Opening SQLite database...");
 
 const dbPromise = open({
@@ -28,7 +27,7 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS subscriptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        subscription_name TEXT NOT NULL,
+        name TEXT NOT NULL,
         amount REAL NOT NULL,
         status TEXT DEFAULT 'active',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -46,16 +45,34 @@ async function initDB() {
         FOREIGN KEY(user_id) REFERENCES users(id),
         FOREIGN KEY(subscription_id) REFERENCES subscriptions(id)
       );
+      
+      CREATE TABLE IF NOT EXISTS payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subscription_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        currency TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        circle_tx_id TEXT,
+        arc_tx_hash TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS ai_analyses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  data TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
     `);
 
     console.log("✅ SQLite database initialized");
   } catch (err) {
     console.error("❌ SQLite init error:", err);
-    process.exit(1); // stop app if DB fails
+    process.exit(1);
   }
 }
 
-// initialize on import
 initDB();
 
 export default dbPromise;

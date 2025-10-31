@@ -1,92 +1,121 @@
 import express from "express";
-import dbp from "../db/sqlite.js";
-import { createTransfer } from "../services/circleWallets.js";
 import { authenticate } from "../middleware/auth.js";
+import { createTransfer } from "../services/circleWallets.js";
+import { sendUSDC } from "../services/arc.js";
 
-const router = express.Router();
-const db = await dbp;
+export default function paymentRoutes(db) {
+  const router = express.Router();
 
-// Simulate a payment
-router.post("/simulate", authenticate, async (req, res) => {
-  const { subscription_id, amount = 0, currency = "USD" } = req.body;
-  try {
-    const result = await db.run(
-      "INSERT INTO payments (subscription_id, amount, currency, status) VALUES (?,?,?,?)",
-      subscription_id,
-      amount,
-      currency,
-      "simulated"
-    );
+  // ------------------------------
+  // Simulate a payment (for testing/demo)
+  // POST /api/payments/simulate
+  // ------------------------------
+  router.post("/simulate", authenticate, async (req, res) => {
+    const { subscription_id, amount = 0, currency = "USD" } = req.body;
+    if (!subscription_id || typeof amount !== "number" || amount <= 0)
+      return res
+        .status(400)
+        .json({ error: "Valid subscription_id and amount required" });
 
-    const payment = await db.get(
-      "SELECT * FROM payments WHERE id = ?",
-      result.lastID
-    );
+    try {
+      const result = await db.run(
+        "INSERT INTO payments (subscription_id, amount, currency, status) VALUES (?,?,?,?)",
+        subscription_id,
+        amount,
+        currency,
+        "simulated"
+      );
 
-    res.json({ payment });
-  } catch (err) {
-    console.error("Simulate payment error:", err);
-    res.status(500).json({ error: "Failed to simulate payment" });
-  }
-});
+      const payment = await db.get(
+        "SELECT * FROM payments WHERE id = ?",
+        result.lastID
+      );
+      res.status(201).json({ payment });
+    } catch (err) {
+      console.error("Simulate payment error:", err);
+      res.status(500).json({ error: "Failed to simulate payment" });
+    }
+  });
 
-// Circle transfer
-router.post("/circle-transfer", authenticate, async (req, res) => {
-  const { subscription_id, fromWalletId, toAddress, amount } = req.body;
-  try {
-    const circleResp = await createTransfer(
-      fromWalletId,
-      toAddress,
-      amount,
-      "USD"
-    );
+  // ------------------------------
+  // Circle wallet transfer
+  // POST /api/payments/circle-transfer
+  // ------------------------------
+  router.post("/circle-transfer", authenticate, async (req, res) => {
+    const { subscription_id, fromWalletId, toAddress, amount } = req.body;
 
-    const result = await db.run(
-      "INSERT INTO payments (subscription_id, amount, currency, status, circle_tx_id) VALUES (?,?,?,?,?)",
-      subscription_id,
-      amount,
-      "USD",
-      "pending",
-      circleResp.id || null
-    );
+    if (
+      !subscription_id ||
+      !fromWalletId ||
+      !toAddress ||
+      typeof amount !== "number"
+    )
+      return res
+        .status(400)
+        .json({ error: "Missing required fields or invalid amount" });
 
-    const payment = await db.get(
-      "SELECT * FROM payments WHERE id = ?",
-      result.lastID
-    );
+    try {
+      const circleResp = await createTransfer(
+        fromWalletId,
+        toAddress,
+        amount,
+        "USD"
+      );
 
-    res.json({ ok: true, circleResp, payment });
-  } catch (err) {
-    console.error("Circle transfer error:", err);
-    res.status(500).json({ error: "Circle transfer failed" });
-  }
-});
+      const result = await db.run(
+        "INSERT INTO payments (subscription_id, amount, currency, status, circle_tx_id) VALUES (?,?,?,?,?)",
+        subscription_id,
+        amount,
+        "USD",
+        "pending",
+        circleResp.id || null
+      );
 
-// Arc send
-router.post("/arc-send", authenticate, async (req, res) => {
-  const { subscription_id, toAddress, amount_cents } = req.body;
-  try {
-    const receipt = await sendUSDC(toAddress, amount_cents);
+      const payment = await db.get(
+        "SELECT * FROM payments WHERE id = ?",
+        result.lastID
+      );
+      res.status(201).json({ payment, circleResp });
+    } catch (err) {
+      console.error("Circle transfer error:", err);
+      res.status(500).json({ error: "Circle transfer failed" });
+    }
+  });
 
-    const result = await db.run(
-      "INSERT INTO payments (subscription_id, amount, currency, status, arc_tx_hash) VALUES (?,?,?,?,?)",
-      subscription_id,
-      (amount_cents / 100).toFixed(2),
-      "USD",
-      "succeeded",
-      receipt.transactionHash || receipt.hash
-    );
+  // ------------------------------
+  // Arc USDC send
+  // POST /api/payments/arc-send
+  // ------------------------------
+  router.post("/arc-send", authenticate, async (req, res) => {
+    const { subscription_id, toAddress, amount_cents } = req.body;
 
-    const payment = await db.get(
-      "SELECT * FROM payments WHERE id = ?",
-      result.lastID
-    );
+    if (!subscription_id || !toAddress || !Number.isInteger(amount_cents))
+      return res
+        .status(400)
+        .json({ error: "Missing required fields or invalid amount_cents" });
 
-    res.json({ ok: true, receipt, payment });
-  } catch (err) {
-    console.error("Arc send error:", err);
-    res.status(500).json({ error: "Arc send failed" });
-  }
-});
+    try {
+      const receipt = await sendUSDC(toAddress, amount_cents);
 
-export default router;
+      const result = await db.run(
+        "INSERT INTO payments (subscription_id, amount, currency, status, arc_tx_hash) VALUES (?,?,?,?,?)",
+        subscription_id,
+        (amount_cents / 100).toFixed(2),
+        "USD",
+        "succeeded",
+        receipt.transactionHash || receipt.hash
+      );
+
+      const payment = await db.get(
+        "SELECT * FROM payments WHERE id = ?",
+        result.lastID
+      );
+      res.status(201).json({ payment, receipt });
+    } catch (err) {
+      console.error("Arc send error:", err);
+      res.status(500).json({ error: "Arc send failed" });
+    }
+  });
+
+  return router;
+}

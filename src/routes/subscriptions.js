@@ -4,7 +4,6 @@ import { authenticate } from "../middleware/auth.js";
 export default function subscriptionRoutes(db) {
   const router = express.Router();
 
-  // Get all subscriptions for logged-in user
   router.get("/", authenticate, async (req, res) => {
     try {
       const subscriptions = await db.all(
@@ -18,20 +17,16 @@ export default function subscriptionRoutes(db) {
     }
   });
 
-  // Create subscription
   router.post("/", authenticate, async (req, res) => {
-    const { vendor, amount } = req.body;
-    if (!vendor || typeof amount !== "number" || amount <= 0) {
-      return res
-        .status(400)
-        .json({ error: "Valid vendor and amount required" });
-    }
+    const { name, amount } = req.body;
+    if (!name || typeof amount !== "number" || amount <= 0)
+      return res.status(400).json({ error: "Valid name and amount required" });
 
     try {
       const result = await db.run(
         "INSERT INTO subscriptions (user_id, name, amount, status) VALUES (?,?,?,?)",
         req.user.id,
-        vendor,
+        name,
         amount,
         "active"
       );
@@ -48,7 +43,6 @@ export default function subscriptionRoutes(db) {
     }
   });
 
-  // Update subscription
   router.put("/:id", authenticate, async (req, res) => {
     const { id } = req.params;
     const { name, amount, status } = req.body;
@@ -87,7 +81,6 @@ export default function subscriptionRoutes(db) {
     }
   });
 
-  // Delete subscription
   router.delete("/:id", authenticate, async (req, res) => {
     const { id } = req.params;
     try {

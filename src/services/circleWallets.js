@@ -1,11 +1,9 @@
-// services/circleWallets.js
 export async function createTransfer(
   fromWalletId,
   toAddress,
   amount,
   currency
 ) {
-  // Input validation
   if (!fromWalletId || typeof fromWalletId !== "string")
     throw new Error("Invalid fromWalletId");
 
@@ -18,11 +16,10 @@ export async function createTransfer(
   if (!currency || typeof currency !== "string")
     throw new Error("Invalid currency");
 
-  // Simulate transfer
   console.log(
-    `Simulating Circle transfer from ${fromWalletId} -> ${toAddress}: ${amount} ${currency}`
+    `Simulating Circle transfer: ${fromWalletId} -> ${toAddress} = ${amount} ${currency}`
   );
 
-  // Return a fake transaction ID
+  // Fake tx ID for demo
   return { id: "CIRCLE_FAKE_TX_123" };
 }
